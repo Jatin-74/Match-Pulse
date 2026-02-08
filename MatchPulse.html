@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Match Pulse | Compatibility AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&family=Playfair+Display:ital,wght@1,400;1,700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --bg-deep: #0a0205;
+            --accent: #ff3385;
+            --accent-glow: rgba(255, 51, 133, 0.6);
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --font-display: 'Playfair Display', serif;
+            --font-body: 'Montserrat', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+
+        body {
+            background-color: var(--bg-deep);
+            background: radial-gradient(circle at center, #1f0510 0%, #000000 100%);
+            color: #fff;
+            font-family: var(--font-body);
+            height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            user-select: none;
+            touch-action: none; 
+        }
+
+        /* --- CURSOR --- */
+        #pulse-cursor {
+            position: fixed; width: 30px; height: 30px;
+            pointer-events: none; z-index: 9999;
+            transform: translate(-50%, -50%);
+            filter: drop-shadow(0 0 8px var(--accent));
+            transition: transform 0.1s;
+        }
+        body:active #pulse-cursor { transform: translate(-50%, -50%) scale(0.8); }
+
+        /* --- TRANSITION OVERLAY --- */
+        #transition-layer {
+            position: fixed; inset: 0; z-index: 10000;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none; opacity: 0;
+        }
+        .heart-transition {
+            color: var(--accent); font-size: 0px;
+            filter: drop-shadow(0 0 50px var(--accent));
+            transition: font-size 0.8s cubic-bezier(0.6, 0.04, 0.98, 0.335);
+        }
+
+        /* --- BACKGROUND --- */
+        #rain-container { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+        .rain-heart {
+            position: absolute; top: -50px; color: var(--accent); opacity: 0.3;
+            animation: fall linear forwards;
+        }
+        @keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+
+        /* --- LAYOUT --- */
+        .screen {
+            display: none; min-height: 100vh; width: 100%;
+            flex-direction: column; align-items: center; justify-content: center;
+            padding: 40px 20px; opacity: 0; transition: opacity 0.5s ease;
+        }
+        .screen.active { display: flex; opacity: 1; }
+
+        .glass-container {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            width: 100%; max-width: 1000px;
+            text-align: center;
+            display: flex; flex-direction: column; align-items: center;
+            margin: auto 0;
+            z-index: 10;
+        }
+
+        .brand-name {
+            font-family: var(--font-display);
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-style: italic;
+            background: linear-gradient(to bottom, #fff, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem; line-height: 1.1;
+        }
+
+        /* --- CAMERA STAGE --- */
+        .stage-area {
+            display: flex; flex-direction: row;
+            align-items: flex-start; justify-content: center;
+            gap: 20px; width: 100%; margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .user-column {
+            flex: 1; min-width: 280px; max-width: 350px;
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        .cam-frame {
+            position: relative; width: 100%; aspect-ratio: 1 / 1;
+            background: #000; border-radius: 24px;
+            border: 1px solid var(--glass-border); overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+        /* --- INPUTS & ZODIAC --- */
+        .input-group { display: flex; gap: 10px; width: 100%; }
+        
+        .name-input {
+            flex: 2;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px; border-radius: 12px;
+            color: white; font-family: var(--font-body); font-size: 1rem;
+            outline: none; transition: 0.3s;
+        }
+        
+        .zodiac-select {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px; border-radius: 12px;
+            color: white; font-family: var(--font-body);
+            outline: none; cursor: none;
+        }
+        .zodiac-select option { background: #000; color: #fff; }
+
+        .name-input:focus, .zodiac-select:focus { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
+
+        /* --- SCANNER --- */
+        .center-controls {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 15px;
+            align-self: center;
+        }
+
+        .scanner-btn {
+            position: relative; width: 100px; height: 100px;
+            border-radius: 50%; background: rgba(0,0,0,0.5);
+            border: 2px solid rgba(255,255,255,0.2);
+            display: flex; align-items: center; justify-content: center;
+            cursor: none; transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none; opacity: 0.5; pointer-events: none;
+        }
+        
+        .scanner-btn.ready { opacity: 1; pointer-events: auto; border-color: var(--accent); }
+        .scanner-btn.holding { transform: scale(0.95); box-shadow: 0 0 30px var(--accent); animation: shake 0.5s infinite; }
+
+        .btn-text {
+            font-size: 1.2rem; color: rgba(255,255,255,0.8);
+            font-weight: 500; letter-spacing: 1px; text-transform: uppercase;
+            transition: color 0.3s; pointer-events: none;
+        }
+        .scanner-btn.holding .btn-text { color: var(--accent); }
+
+        .progress-ring {
+            position: absolute; top: -5px; left: -5px; width: 110px; height: 110px;
+            transform: rotate(-90deg); pointer-events: none;
+        }
+        .progress-ring__circle {
+            stroke: var(--accent); stroke-width: 4; fill: transparent;
+            stroke-dasharray: 314; stroke-dashoffset: 314;
+            transition: stroke-dashoffset 0.1s linear;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: scale(0.95) translate(0,0); }
+            25% { transform: scale(0.95) translate(1px, 1px); }
+            75% { transform: scale(0.95) translate(-1px, -1px); }
+        }
+
+        /* --- BUTTONS --- */
+        .btn-capture {
+            position: absolute; bottom: 15px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6); border: 1px solid var(--accent);
+            color: #fff; padding: 10px 25px; border-radius: 50px; font-weight: 600; font-size: 0.8rem;
+            cursor: none; z-index: 100; transition: 0.3s;
+        }
+        .btn-capture:hover { background: var(--accent); box-shadow: 0 0 20px var(--accent-glow); }
+
+        .btn-main {
+            background: transparent; border: 1px solid var(--accent);
+            color: white; padding: 15px 40px; border-radius: 50px;
+            font-family: var(--font-body); font-weight: 700;
+            text-transform: uppercase; transition: all 0.3s; margin-top: 20px;
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+        .btn-main:hover { background: var(--accent); box-shadow: 0 0 40px var(--accent-glow); transform: scale(1.05); animation: none; }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 10px rgba(255, 51, 133, 0.3); }
+            50% { box-shadow: 0 0 25px rgba(255, 51, 133, 0.8); border-color: #ff99cc; }
+            100% { box-shadow: 0 0 10px rgba(255, 51, 133, 0.3); }
+        }
+
+        /* --- RESULTS: SOUL CARD LAYOUT --- */
+        #soul-card {
+            width: 100%; display: flex; flex-direction: column; align-items: center;
+            background: transparent; padding: 20px; border-radius: 20px;
+        }
+
+        #soul-card.screenshot-mode {
+            background: linear-gradient(135deg, #1a0b14 0%, #000000 100%);
+            border: 2px solid rgba(255, 51, 133, 0.5);
+            box-shadow: 0 0 50px rgba(255, 51, 133, 0.2); padding: 40px;
+        }
+
+        .names-display { font-family: var(--font-display); font-size: 2rem; margin-top: 10px; color: #fff; text-transform: capitalize; }
+        
+        .score-big {
+            font-family: var(--font-display);
+            font-size: clamp(6rem, 15vw, 9rem);
+            line-height: 1; margin: 10px 0; color: #fff;
+            text-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent);
+        }
+
+        .info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; margin-top: 20px;
+        }
+        
+        .info-box {
+            background: rgba(255, 51, 133, 0.05); border: 1px solid rgba(255, 51, 133, 0.2);
+            border-radius: 16px; padding: 15px; text-align: left;
+        }
+
+        .info-title {
+            font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; 
+            color: var(--accent); margin-bottom: 8px; font-weight: 700;
+        }
+        .info-content { font-size: 0.9rem; line-height: 1.4; opacity: 0.9; }
+
+        .timeline-list { list-style: none; font-size: 0.8rem; opacity: 0.8; }
+        .timeline-list li { margin-bottom: 5px; }
+        .timeline-list span { color: #ff99cc; font-weight: 600; }
+
+        .card-footer {
+            display: none; margin-top: 20px; opacity: 0.5; font-size: 0.8rem;
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+        #soul-card.screenshot-mode .card-footer { display: block; }
+
+        .legal-disclaimer {
+            margin-top: 30px; font-size: 0.6rem; opacity: 0.4;
+            max-width: 90%; line-height: 1.4; text-align: center; font-family: monospace;
+        }
+
+        @media (max-width: 768px) {
+            .stage-area { flex-direction: column; align-items: center; }
+            .center-controls { flex-direction: row; width: 100%; justify-content: center; margin: 15px 0; }
+            .info-grid { grid-template-columns: 1fr; }
+            #screen-camera { padding-bottom: 80px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="pulse-cursor">
+        <svg viewBox="0 0 24 24" fill="none" width="30" height="30">
+            <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:white;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#ff3385;stop-opacity:1" />
+                </linearGradient>
+            </defs>
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="url(#grad1)"/>
+        </svg>
+    </div>
+
+    <div id="transition-layer"><div class="heart-transition">❤</div></div>
+    <div id="rain-container"></div>
+
+    <section id="screen-intro" class="screen active">
+        <div class="glass-container">
+            <h1 class="brand-name">Match Pulse</h1>
+            <p style="opacity: 0.7; letter-spacing: 4px; margin-bottom: 30px;">VALENTINE'S EDITION</p>
+            <button class="btn-main" onclick="goToCamera()">Start Analysis</button>
+        </div>
+    </section>
+
+    <section id="screen-camera" class="screen">
+        <div class="glass-container">
+            <h2 style="font-family: var(--font-display); margin-bottom: 5px;">Sync Your Souls</h2>
+            <p style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 20px;">Capture photos and enter details</p>
+            
+            <div class="stage-area">
+                <div class="user-column">
+                    <div class="cam-frame" id="frame1">
+                        <canvas id="canvas1"></canvas>
+                        <button class="btn-capture" id="btn1" onclick="capture(1)">CAPTURE</button>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="name1" class="name-input" placeholder="Name 1" maxlength="12">
+                        <select id="zodiac1" class="zodiac-select">
+                            <option value="">Sign</option>
+                            <option value="♈">♈ Aries</option>
+                            <option value="♉">♉ Taurus</option>
+                            <option value="♊">♊ Gemini</option>
+                            <option value="♋">♋ Cancer</option>
+                            <option value="♌">♌ Leo</option>
+                            <option value="♍">♍ Virgo</option>
+                            <option value="♎">♎ Libra</option>
+                            <option value="♏">♏ Scorpio</option>
+                            <option value="♐">♐ Sagittarius</option>
+                            <option value="♑">♑ Capricorn</option>
+                            <option value="♒">♒ Aquarius</option>
+                            <option value="♓">♓ Pisces</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="center-controls">
+                    <div id="scan-instruction" style="font-size:0.7rem; letter-spacing:2px; opacity:0.7; margin-bottom:5px;">HOLD TO SCAN</div>
+                    <div class="scanner-btn" id="scan-btn">
+                        <svg class="progress-ring"><circle class="progress-ring__circle" r="50" cx="55" cy="55"/></svg>
+                        <span class="btn-text">Touch</span>
+                    </div>
+                </div>
+
+                <div class="user-column">
+                    <div class="cam-frame" id="frame2">
+                        <canvas id="canvas2"></canvas>
+                        <button class="btn-capture" id="btn2" onclick="capture(2)">CAPTURE</button>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="name2" class="name-input" placeholder="Name 2" maxlength="12">
+                        <select id="zodiac2" class="zodiac-select">
+                            <option value="">Sign</option>
+                            <option value="♈">♈ Aries</option>
+                            <option value="♉">♉ Taurus</option>
+                            <option value="♊">♊ Gemini</option>
+                            <option value="♋">♋ Cancer</option>
+                            <option value="♌">♌ Leo</option>
+                            <option value="♍">♍ Virgo</option>
+                            <option value="♎">♎ Libra</option>
+                            <option value="♏">♏ Scorpio</option>
+                            <option value="♐">♐ Sagittarius</option>
+                            <option value="♑">♑ Capricorn</option>
+                            <option value="♒">♒ Aquarius</option>
+                            <option value="♓">♓ Pisces</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <video id="video-feed" autoplay playsinline muted style="display:none;"></video>
+    </section>
+
+    <section id="screen-result" class="screen">
+        <div class="glass-container" id="soul-card-container">
+            <div id="soul-card">
+                <p style="letter-spacing: 5px; color: var(--accent); margin-bottom: 0;">SOUL CONNECTION</p>
+                
+                <div class="score-big" id="score-text">0%</div>
+                <div class="names-display" id="final-names"></div>
+                <p id="msg-text" style="font-size: 1.4rem; margin: 10px 0; font-style: italic; opacity: 0.9; color: #ff99cc;"></p>
+                
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); width: 100%; margin: 10px 0;"></div>
+
+                <div class="info-grid">
+                    <div class="info-box">
+                        <div class="info-title">💘 Date Idea</div>
+                        <div class="info-content" id="date-idea">Generating...</div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-title">🔮 Future Timeline</div>
+                        <ul class="timeline-list" id="timeline-data">
+                            </ul>
+                    </div>
+                </div>
+
+                <div class="card-footer">Match Pulse AI</div>
+            </div>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn-main" onclick="downloadCard()">📸 Save Card</button>
+                <button class="btn-main" onclick="location.reload()">Reset Pulse</button>
+            </div>
+
+            <p class="legal-disclaimer">
+                DISCLAIMER: The results produced by Match Pulse are entirely algorithmic and AI-generated for entertainment purposes only. <br>
+                The developers are not responsible for the accuracy or real-world implications of these results.
+            </p>
+        </div>
+    </section>
+
+    <script>
+        // --- 1. Cursor & Rain ---
+        const cursor = document.getElementById('pulse-cursor');
+        document.addEventListener('mousemove', e => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+
+        function makeRain() {
+            const el = document.createElement('div');
+            el.innerHTML = '❤'; el.className = 'rain-heart';
+            el.style.left = Math.random() * 100 + 'vw';
+            el.style.fontSize = (Math.random() * 20 + 10) + 'px';
+            el.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            document.getElementById('rain-container').appendChild(el);
+            setTimeout(() => el.remove(), 5000);
+        }
+        setInterval(makeRain, 300);
+
+        // --- 2. Camera Logic ---
+        const video = document.getElementById('video-feed');
+        const c1 = document.getElementById('canvas1');
+        const c2 = document.getElementById('canvas2');
+        let stream = null, state = { p1: false, p2: false }, animationId = null;
+
+        async function goToCamera() {
+            document.getElementById('screen-intro').classList.remove('active');
+            document.getElementById('screen-camera').classList.add('active');
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } });
+                video.srcObject = stream; await video.play(); drawLoop();
+            } catch(e) { console.error(e); alert("Camera permission required."); }
+        }
+
+        function drawVideo(ctx, canvas) {
+            const vRatio = video.videoWidth / video.videoHeight;
+            const cRatio = canvas.width / canvas.height;
+            let sx, sy, sWidth, sHeight;
+            if (vRatio > cRatio) { sHeight = video.videoHeight; sWidth = sHeight * cRatio; sx = (video.videoWidth - sWidth) / 2; sy = 0; }
+            else { sWidth = video.videoWidth; sHeight = sWidth / cRatio; sx = 0; sy = (video.videoHeight - sHeight) / 2; }
+            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+        }
+
+        function drawLoop() {
+            if(c1.width !== c1.clientWidth) { c1.width = c1.clientWidth; c1.height = c1.clientHeight; c2.width = c2.clientWidth; c2.height = c2.clientHeight; }
+            if (!state.p1) drawVideo(c1.getContext('2d'), c1);
+            if (!state.p2) drawVideo(c2.getContext('2d'), c2);
+            animationId = requestAnimationFrame(drawLoop);
+        }
+
+        function capture(id) {
+            state['p'+id] = true;
+            document.getElementById('btn'+id).style.display = 'none';
+            if (state.p1 && state.p2) {
+                cancelAnimationFrame(animationId);
+                const btn = document.getElementById('scan-btn');
+                btn.classList.add('ready');
+            }
+        }
+
+        // --- 3. Hold-to-Scan ---
+        let scanTimer = null;
+        const circle = document.querySelector('.progress-ring__circle');
+        const scanBtn = document.getElementById('scan-btn');
+        const instruction = document.getElementById('scan-instruction');
+
+        const startEvents = ['mousedown', 'touchstart'];
+        const endEvents = ['mouseup', 'mouseleave', 'touchend', 'touchcancel'];
+
+        startEvents.forEach(evt => scanBtn.addEventListener(evt, (e) => {
+            if(e.type === 'touchstart') e.preventDefault();
+            startScan();
+        }));
+        endEvents.forEach(evt => scanBtn.addEventListener(evt, (e) => {
+            if(e.type === 'touchend') e.preventDefault();
+            stopScan();
+        }));
+
+        function startScan() {
+            if (!state.p1 || !state.p2) return;
+            scanBtn.classList.add('holding');
+            instruction.innerText = "CALCULATING...";
+            instruction.style.color = "#ff3385";
+            let percent = 0;
+            scanTimer = setInterval(() => {
+                percent += 2; 
+                circle.style.strokeDashoffset = 314 - (314 * percent / 100);
+                if (percent >= 100) { clearInterval(scanTimer); completeScan(); }
+            }, 20);
+        }
+
+        function stopScan() {
+            scanBtn.classList.remove('holding');
+            instruction.innerText = "HOLD TO SCAN";
+            instruction.style.color = "rgba(255,255,255,0.7)";
+            clearInterval(scanTimer);
+            circle.style.strokeDashoffset = 314;
+        }
+
+        function completeScan() {
+            triggerTransition();
+        }
+
+        // --- 4. DATA POOLS ---
+        const DATE_IDEAS = [
+            "Midnight Stargazing & Wine 🍷", "Neon Arcade Battle 🕹️", "Pottery Class & Messy Hands 🏺",
+            "Hidden Speakeasy Hunt 🍸", "Sunrise Beach Hike 🌊", "Building a Pillow Fort 🏰",
+            "Late Night Drive & Playlist 🚗", "Cooking a 5-Course Meal 🍝", "Rooftop Jazz & Chill 🎷"
+        ];
+
+        const PETS = ["Golden Retriever 🐕", "Lazy Persian Cat 🐈", "Wise Turtle 🐢", "Hyper Bunny 🐇", "Chaos Gecko 🦎", "Loyal Wolf 🐺", "Sleepy Koala 🐨", "Tiny Guinea Pig 🐹", "Playful Husky 🐺", "Chatty Parrot 🦜", "Calm Gold Fish 🐠", "Peaceful Dove 🕊️"];
+        const TRIPS = ["Tokyo 🗼", "Paris 🥐", "Bali 🌴", "Iceland ❄️", "New York 🗽", "Santorini 🏛️", "Kyoto ⛩️", "Swiss Alps 🏔️", "Great Wall of China 🏯", "Pyramids of Giza 🛕", "Rome 🏛️", "Barcelona 🎨", "Amsterdam 🚲", "Dubai 🏙️", "Venice 🚤", "Prague 🕰️", "Sydney 🎭", "Cape Town 🌍"];
+        const VIBES = ["Power Couple ⚡", "Chaotic Good 🌀", "Cozy Souls ☕", "Ride or Die 🏍️", "Twin Flames 🔥", "Old Soul Energy 🕰️", "Main Character Energy 🎬", "Soft Chaos 🌫️", "Peaceful Rebel ✌️", "Late Night Thinkers 🌙", "Low-Key Legends 🏆", "Hopeless Romantics 🌹", "Quietly Unstoppable 🚀", "Thunder & Calm ⚡🌊"];
+
+        // NEW: Dynamic Taglines Array
+        const TAGLINES = {
+            Friendship: ["Partners in Crime 👯", "Platonic Soulmates ✨", "Ride or Die 🤜🤛", "Perfect Couple ✨"],
+            Lovers: ["Electric Romance ⚡", "Written in the Stars ✨", "Cosmic Love ❤️", "True Lovers ❤️"],
+            Affection: ["Sweetest Connection 🍭", "Butterflies Daily 🦋", "Heartwarming Bond 💖", "Deep Affection 💖"],
+            Marriage: ["Put a Ring on It 💍", "Eternal Union 💒", "Lifetime Supply of Love 🏡", "Destined for Marriage 💍"],
+            Enemy: ["Chaos & Passion 🔥", "Rivals to Lovers? ⚔️", "Spicy Disaster 🌶️", "Spicy Chemistry 🌶️"],
+            Sibling: ["Chaotic Siblings 🤪", "Familiar Souls 🧬", "Zero Romance, Max Fun 🎮", "Kindred Spirits 🌸"],
+            TwinSoul: ["Twin Flames Detected 🔥", "Mirror Souls 🪞", "Perfect Resonance ♾️"] // Special category for identical names
+        };
+
+        // --- 5. LOGIC ENGINE ---
+        function triggerTransition() {
+            const layer = document.getElementById('transition-layer');
+            const heart = layer.querySelector('.heart-transition');
+            layer.style.opacity = '1';
+            setTimeout(() => { heart.style.fontSize = '300vmax'; }, 50);
+            setTimeout(() => {
+                document.getElementById('screen-camera').classList.remove('active');
+                document.getElementById('screen-result').classList.add('active');
+                calculateMatch();
+            }, 800);
+            setTimeout(() => { layer.style.opacity = '0'; heart.style.display = 'none'; }, 1200);
+        }
+
+        function analyzePhotos() {
+            return Math.floor(Math.random() * (100 - 60) + 60); // Simulated Bio-Score
+        }
+
+        function calculateMatch() {
+            const n1 = document.getElementById('name1').value.trim() || "Soul 1";
+            const n2 = document.getElementById('name2').value.trim() || "Soul 2";
+            const z1 = document.getElementById('zodiac1').value;
+            const z2 = document.getElementById('zodiac2').value;
+
+            document.getElementById('final-names').innerText = `${z1} ${n1} & ${n2} ${z2}`;
+
+            // FLAMES LOGIC
+            let s1 = n1.toLowerCase().replace(/[^a-z]/g, "").split("");
+            let s2 = n2.toLowerCase().replace(/[^a-z]/g, "").split("");
+            
+            // Handle Identical Names (Twin Soul Check)
+            let isTwinSoul = (n1.toLowerCase() === n2.toLowerCase());
+
+            if (!isTwinSoul) {
+                for (let i = 0; i < s1.length; i++) {
+                    for (let j = 0; j < s2.length; j++) {
+                        if (s1[i] === s2[j]) { s1[i] = "*"; s2[j] = "*"; break; }
+                    }
+                }
+            }
+
+            let count = 0;
+            for(let c of s1) if(c !== "*") count++;
+            for(let c of s2) if(c !== "*") count++;
+
+            let flames = ["Friendship", "Lovers", "Affection", "Marriage", "Enemy", "Sibling"];
+            let resultKey = "Friendship"; // Default
+
+            if (isTwinSoul || count === 0) {
+                resultKey = "TwinSoul";
+            } else {
+                let tempFlames = [...flames]; // Copy array
+                while(tempFlames.length > 1) {
+                    let index = (count % tempFlames.length) - 1;
+                    if(index === -1) index = tempFlames.length - 1;
+                    tempFlames.splice(index, 1);
+                    tempFlames = tempFlames.slice(index).concat(tempFlames.slice(0, index));
+                }
+                resultKey = tempFlames[0];
+            }
+
+            // SCORE LOGIC
+            let flamesScore = 0;
+            switch(resultKey) {
+                case "Friendship": flamesScore = 88; break;
+                case "Lovers": flamesScore = 95; break;
+                case "Affection": flamesScore = 85; break;
+                case "Marriage": flamesScore = 99; break;
+                case "Enemy": flamesScore = 65; break;
+                case "Sibling": flamesScore = 75; break;
+                case "TwinSoul": flamesScore = 100; break;
+            }
+
+            // --- HYBRID CALCULATION ---
+            let photoScore = analyzePhotos();
+            let finalScore = Math.floor((flamesScore + photoScore) / 2);
+
+            // DYNAMIC TAGLINE SELECTION
+            let options = TAGLINES[resultKey];
+            let finalVerdict = options[Math.floor(Math.random() * options.length)];
+            
+            // Add extra emoji if score is super high
+            if (finalScore > 90) finalVerdict += " 🔥";
+
+            document.getElementById('msg-text').innerText = finalVerdict;
+
+            // RANDOMIZED GENERATORS
+            document.getElementById('date-idea').innerText = DATE_IDEAS[Math.floor(Math.random() * DATE_IDEAS.length)];
+            const html = `
+                <li><span>Next Trip:</span> ${TRIPS[Math.floor(Math.random() * TRIPS.length)]}</li>
+                <li><span>Spirit Pet:</span> ${PETS[Math.floor(Math.random() * PETS.length)]}</li>
+                <li><span>Vibe:</span> ${VIBES[Math.floor(Math.random() * VIBES.length)]}</li>
+            `;
+            document.getElementById('timeline-data').innerHTML = html;
+
+            // ANIMATE SCORE
+            let curr = 0;
+            const scoreEl = document.getElementById('score-text');
+            const timer = setInterval(() => {
+                curr++; 
+                if(curr > finalScore) {
+                    clearInterval(timer); 
+                    showConfetti(); 
+                } else {
+                    scoreEl.innerText = curr + "%";
+                }
+            }, 30);
+        }
+
+        function showConfetti() {
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#ff3385', '#ffffff'], shapes: ['heart'] });
+        }
+
+        function downloadCard() {
+            const card = document.getElementById('soul-card');
+            card.classList.add('screenshot-mode');
+            html2canvas(card, { backgroundColor: null, scale: 2 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'MatchPulse_Result.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                card.classList.remove('screenshot-mode');
+            });
+        }
+    </script>
+</body>
+</html>
